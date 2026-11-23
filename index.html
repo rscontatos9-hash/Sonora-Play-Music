@@ -56,6 +56,8 @@
         const DEFAULT_RATES = {
             'Ton': { debito: 1.35, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
             'PagSeguro': { debito: 1.69, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
+            'PagBank (Moderninha)': { debito: 1.69, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
+            'InfinitePay': { debito: 1.37, credito: 3.15, p2: 4.50, p3: 5.50, p4: 6.50, p5: 7.50, p6: 8.50, p7: 9.50, p8: 10.50, p9: 11.50, p10: 12.50, p11: 13.50, p12: 14.60 },
             'Mercado Pago': { debito: 1.99, credito: 4.74, p2: 5.98, p3: 7.18, p4: 8.38, p5: 9.58, p6: 10.78, p7: 12.00, p8: 13.20, p9: 14.40, p10: 15.60, p11: 16.80, p12: 17.98 },
             'Stone': { debito: 1.45, credito: 3.10, p2: 4.60, p3: 5.90, p4: 7.20, p5: 8.50, p6: 9.80, p7: 11.10, p8: 12.40, p9: 13.70, p10: 15.00, p11: 16.30, p12: 17.60 },
             'SumUp': { debito: 1.50, credito: 3.10, p2: 4.60, p3: 5.90, p4: 7.20, p5: 8.50, p6: 9.80, p7: 11.10, p8: 12.40, p9: 13.70, p10: 15.00, p11: 16.30, p12: 17.60 },
@@ -71,7 +73,7 @@
         };
 
         function App() {
-            const [cashPrice, setCashPrice] = useState(50); // Alterado para 50 para facilitar seu teste
+            const [cashPrice, setCashPrice] = useState(50); 
             const [selectedMachine, setSelectedMachine] = useState('Stone');
             const [viewMode, setViewMode] = useState('lojista');
             const [feeMode, setFeeMode] = useState('pass');
@@ -118,7 +120,6 @@
                 }
             };
 
-            // CORREÇÃO AQUI: Variáveis exclusivas para o Modo Educativo (sempre calcula o prejuízo se absorver)
             const tax12x = rates[selectedMachine].p12;
             const net12xAbsorbed = cashPrice * (1 - (tax12x / 100));
             const loss12xAbsorbed = cashPrice - net12xAbsorbed;
@@ -212,16 +213,17 @@
                                 </p>
                             </div>
 
+                            {/* SESSÃO DAS MAQUININHAS ALINHADAS COM GRID */}
                             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                                 <label className="text-xs font-bold text-brand-muted uppercase tracking-wider mb-3 block">
                                     Maquininha
                                 </label>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="grid grid-cols-2 gap-2">
                                     {Object.keys(rates).map(machine => (
                                         <button
                                             key={machine}
                                             onClick={() => setSelectedMachine(machine)}
-                                            className={`px-3 py-2 text-sm rounded-lg border transition-all ${selectedMachine === machine ? 'bg-brand-dark text-white border-brand-dark shadow-md' : 'bg-white text-brand-text border-gray-200 hover:border-gray-300'}`}
+                                            className={`w-full min-h-[44px] px-2 py-1.5 text-[13px] font-semibold rounded-xl border transition-all flex items-center justify-center text-center leading-tight ${selectedMachine === machine ? 'bg-brand-dark text-white border-brand-dark shadow-md' : 'bg-white text-brand-text border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                                         >
                                             {machine}
                                         </button>
@@ -251,7 +253,6 @@
                                 </p>
                             </div>
 
-                            {/* CORREÇÃO DO MODO EDUCATIVO AQUI */}
                             <div className="bg-brand-green rounded-2xl p-5 text-white shadow-md">
                                 <h3 className="text-brand-accent text-xs font-bold uppercase tracking-wider mb-2">Modo Educativo</h3>
                                 <p className="text-sm leading-relaxed">
