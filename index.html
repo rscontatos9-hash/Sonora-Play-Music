@@ -39,7 +39,6 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* Animations */
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -54,7 +53,6 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // Taxas padrão
         const DEFAULT_RATES = {
             'Ton': { debito: 1.35, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
             'PagSeguro': { debito: 1.69, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
@@ -68,7 +66,6 @@
             'Sicred': { debito: 1.50, credito: 3.50, p2: 5.00, p3: 6.00, p4: 7.00, p5: 8.00, p6: 9.00, p7: 10.00, p8: 11.00, p9: 12.00, p10: 13.00, p11: 14.50, p12: 16.00 },
         };
 
-        // Cores oficiais das maquininhas
         const MACHINE_COLORS = {
             'Ton': { bg: 'bg-black', text: 'text-white', border: 'border-black', dot: 'bg-black' },
             'PagSeguro': { bg: 'bg-[#00A8E8]', text: 'text-white', border: 'border-[#00A8E8]', dot: 'bg-[#00A8E8]' },
@@ -102,16 +99,23 @@
             const [saveError, setSaveError] = useState('');
             const [saveSuccess, setSaveSuccess] = useState(false);
             
-            // Estado para notificações de cópia
+            const [clients, setClients] = useState([]);
+            const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+            const [newClient, setNewClient] = useState({ name: '', email: '', phone: '' });
+
+            const [clientSelectedParcel, setClientSelectedParcel] = useState(12);
             const [toastMessage, setToastMessage] = useState('');
 
             useEffect(() => {
                 try {
-                    const saved = localStorage.getItem('@cartao_taxas');
-                    if (saved) {
-                        // Mescla as taxas salvas com as novas maquininhas padrão, caso o usuário já tenha um cache antigo
-                        const parsedSaved = JSON.parse(saved);
+                    const savedRates = localStorage.getItem('@cartao_taxas');
+                    if (savedRates) {
+                        const parsedSaved = JSON.parse(savedRates);
                         setRates({ ...DEFAULT_RATES, ...parsedSaved });
+                    }
+                    const savedClients = localStorage.getItem('@cartao_clientes');
+                    if (savedClients) {
+                        setClients(JSON.parse(savedClients));
                     }
                 } catch (e) {
                     console.log("Ambiente não permite localStorage.");
@@ -143,9 +147,32 @@
                 }
             };
 
+            const handleAddClient = (e) => {
+                e.preventDefault();
+                if (!newClient.name || !newClient.phone) return;
+                
+                const client = { ...newClient, id: Date.now().toString() };
+                const updatedClients = [...clients, client];
+                setClients(updatedClients);
+                
+                try {
+                    localStorage.setItem('@cartao_clientes', JSON.stringify(updatedClients));
+                } catch (e) { console.warn(e); }
+                
+                setNewClient({ name: '', email: '', phone: '' });
+                showToast('Cliente cadastrado com sucesso!');
+            };
+
+            const handleRemoveClient = (id) => {
+                const updatedClients = clients.filter(c => c.id !== id);
+                setClients(updatedClients);
+                try {
+                    localStorage.setItem('@cartao_clientes', JSON.stringify(updatedClients));
+                } catch (e) { console.warn(e); }
+            };
+
             const tax12x = rates[selectedMachine].p12;
             const net12xAbsorbed = cashPrice * (1 - (tax12x / 100));
-            const loss12xAbsorbed = cashPrice - net12xAbsorbed;
 
             const calculations = useMemo(() => {
                 const currentRates = rates[selectedMachine];
@@ -180,14 +207,29 @@
                 };
             }, [cashPrice, selectedMachine, feeMode, rates]);
 
-            // Função para copiar para a área de transferência (com fallback)
+            const showToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => { setToastMessage(''); }, 3000);
+            };
+
+            const getMessageText = () => {
+                let msg = `Olá! Seguem os valores para pagamento:\n\n`;
+                msg += `💵 *À vista / PIX:* ${formatCurrency(cashPrice)}\n`;
+                msg += `💳 *Débito:* ${formatCurrency(calculations.debito.clientPays)}\n`;
+                msg += `💳 *Crédito à vista:* ${formatCurrency(calculations.credito.clientPays)}\n\n`;
+                msg += `*Opções Parceladas:*\n`;
+                calculations.parcelas.forEach(p => {
+                    msg += `▪️ ${p.num}x de ${formatCurrency(p.installmentValue)} (Total: ${formatCurrency(p.clientPays)})\n`;
+                });
+                msg += `\n_Valores calculados via maquininha ${selectedMachine}._`;
+                return msg;
+            };
+
             const copyToClipboard = (text, successMessage) => {
                 if (navigator.clipboard && window.isSecureContext) {
                     navigator.clipboard.writeText(text).then(() => {
                         showToast(successMessage);
-                    }).catch(() => {
-                        fallbackCopy(text, successMessage);
-                    });
+                    }).catch(() => { fallbackCopy(text, successMessage); });
                 } else {
                     fallbackCopy(text, successMessage);
                 }
@@ -210,48 +252,102 @@
                 }
             };
 
-            const showToast = (msg) => {
-                setToastMessage(msg);
-                setTimeout(() => {
-                    setToastMessage('');
-                }, 3000);
-            };
-
-            // Ação: Copiar Mensagem (Formatada para WhatsApp/Cliente)
             const handleCopyMessage = () => {
-                let msg = `Olá! Seguem os valores para pagamento:\n\n`;
-                msg += `💵 *À vista / PIX:* ${formatCurrency(cashPrice)}\n`;
-                msg += `💳 *Débito:* ${formatCurrency(calculations.debito.clientPays)}\n`;
-                msg += `💳 *Crédito à vista:* ${formatCurrency(calculations.credito.clientPays)}\n\n`;
-                msg += `*Opções Parceladas:*\n`;
-                calculations.parcelas.forEach(p => {
-                    msg += `▪️ ${p.num}x de ${formatCurrency(p.installmentValue)} (Total: ${formatCurrency(p.clientPays)})\n`;
-                });
-                msg += `\n_Valores calculados via maquininha ${selectedMachine}._`;
-                
-                copyToClipboard(msg, 'Mensagem copiada para o cliente!');
+                copyToClipboard(getMessageText(), 'Mensagem copiada para o cliente!');
             };
 
-            // Ação: Gerar Tabela (Texto estruturado para colar na parede ou salvar)
+            const handleSendWhatsApp = (client) => {
+                const phone = client.phone.replace(/\D/g, '');
+                if (!phone) {
+                    showToast('Celular inválido.');
+                    return;
+                }
+                const text = encodeURIComponent(getMessageText());
+                const fullPhone = phone.length <= 11 ? `55${phone}` : phone;
+                window.open(`https://wa.me/${fullPhone}?text=${text}`, '_blank');
+            };
+
             const handleGenerateTable = () => {
-                let text = `==============================\n`;
-                text += `    TABELA DE PREÇOS - ${selectedMachine.toUpperCase()}\n`;
-                text += `==============================\n\n`;
-                text += `MÉTODO         | CLIENTE PAGA\n`;
-                text += `----------------|-------------\n`;
-                text += `PIX / À VISTA  | ${formatCurrency(cashPrice)}\n`;
-                text += `DÉBITO         | ${formatCurrency(calculations.debito.clientPays)}\n`;
-                text += `CRÉDITO        | ${formatCurrency(calculations.credito.clientPays)}\n\n`;
-                text += `PARCELADO      | TOTAL      | PARCELA\n`;
-                text += `----------------|------------|-------------\n`;
-                calculations.parcelas.forEach(p => {
-                    const numStr = `${p.num}x`.padEnd(14);
-                    const totalStr = formatCurrency(p.clientPays).padEnd(12);
-                    text += `${numStr} | ${totalStr} | ${formatCurrency(p.installmentValue)}\n`;
-                });
-                text += `\n==============================`;
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
                 
-                copyToClipboard(text, 'Tabela de preços copiada!');
+                const width = 800;
+                const rowHeight = 50;
+                const padding = 40;
+                const headerHeight = 120;
+                const totalRows = 1 + 3 + 1 + 11 + 1; 
+                const height = headerHeight + (totalRows * rowHeight) + padding;
+
+                canvas.width = width;
+                canvas.height = height;
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+
+                ctx.fillStyle = '#0B1F13';
+                ctx.fillRect(0, 0, width, headerHeight);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 32px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`TABELA DE PREÇOS - ${selectedMachine.toUpperCase()}`, width / 2, 50);
+                
+                ctx.font = '18px sans-serif';
+                ctx.fillStyle = '#A0AEC0';
+                ctx.fillText(`Valores calculados com base no preço à vista de ${formatCurrency(cashPrice)}`, width / 2, 85);
+
+                let currentY = headerHeight + padding;
+
+                const drawRow = (col1, col2, col3, isHeader = false, isDestaque = false) => {
+                    if (isDestaque) {
+                        ctx.fillStyle = '#F0FDF4';
+                        ctx.fillRect(0, currentY - 30, width, rowHeight);
+                    }
+
+                    ctx.fillStyle = isHeader ? '#5C7566' : '#1A2E22';
+                    ctx.font = isHeader ? 'bold 16px sans-serif' : '18px sans-serif';
+                    
+                    ctx.textAlign = 'left';
+                    ctx.fillText(col1, padding, currentY);
+                    
+                    ctx.textAlign = 'center';
+                    ctx.fillText(col2, width / 2, currentY);
+
+                    ctx.textAlign = 'right';
+                    if (col3) ctx.fillText(col3, width - padding, currentY);
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#E2E8F0';
+                    ctx.lineWidth = 1;
+                    ctx.moveTo(padding, currentY + 15);
+                    ctx.lineTo(width - padding, currentY + 15);
+                    ctx.stroke();
+
+                    currentY += rowHeight;
+                };
+
+                drawRow('MÉTODO / PARCELAS', 'CLIENTE PAGA (TOTAL)', 'PARCELA', true);
+
+                drawRow('PIX / À VISTA', formatCurrency(cashPrice), '-');
+                drawRow('DÉBITO', formatCurrency(calculations.debito.clientPays), '-');
+                drawRow('CRÉDITO À VISTA', formatCurrency(calculations.credito.clientPays), '-');
+                
+                drawRow('PARCELADO', '', '', true);
+
+                calculations.parcelas.forEach(p => {
+                    drawRow(`${p.num}x`, formatCurrency(p.clientPays), formatCurrency(p.installmentValue));
+                });
+
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#A0AEC0';
+                ctx.font = '14px sans-serif';
+                ctx.fillText('Gerado via App Calculadora de Cartão', width / 2, currentY + 10);
+
+                const link = document.createElement('a');
+                link.download = `tabela-precos-${selectedMachine.toLowerCase()}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                showToast('Tabela gerada e baixada!');
             };
 
             return (
@@ -262,21 +358,29 @@
                                 R$
                             </div>
                             <div>
-                                <h1 className="text-sm font-bold leading-tight text-brand-dark">CALCULADORA DE<br/>CARTÃO</h1>
+                                <h1 className="text-xs sm:text-sm font-bold leading-tight text-brand-dark">CALCULADORA<br/>DE CARTÃO</h1>
                             </div>
                         </div>
-                        <button 
-                            onClick={openEditModal}
-                            className="text-xs font-semibold bg-brand-light text-brand-dark px-3 py-2 rounded-full border border-gray-300 shadow-sm active:scale-95 transition-transform"
-                        >
-                            Editar minhas taxas
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setIsClientModalOpen(true)}
+                                className="text-[11px] sm:text-xs font-semibold bg-white text-brand-dark px-3 py-2 rounded-full border border-gray-300 shadow-sm active:bg-brand-accent active:text-white active:border-brand-accent transition-all flex items-center gap-1"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                Clientes
+                            </button>
+                            <button 
+                                onClick={openEditModal}
+                                className="text-[11px] sm:text-xs font-semibold bg-white text-brand-dark px-3 py-2 rounded-full border border-gray-300 shadow-sm active:bg-brand-accent active:text-white active:border-brand-accent transition-all"
+                            >
+                                Editar taxas
+                            </button>
+                        </div>
                     </header>
 
                     <main className="max-w-4xl mx-auto px-4 mt-4 md:mt-8 grid grid-cols-1 md:grid-cols-12 gap-6">
                         
                         <div className="md:col-span-5 space-y-4">
-                            
                             <div className="bg-brand-dark p-1 rounded-full flex relative shadow-inner">
                                 <button 
                                     onClick={() => setViewMode('lojista')}
@@ -305,33 +409,23 @@
                                         className="w-full bg-brand-light text-3xl md:text-4xl font-display font-bold text-brand-dark pl-12 pr-4 py-4 rounded-xl border-2 border-transparent focus:border-brand-accent focus:outline-none transition-colors"
                                     />
                                 </div>
-                                <p className="text-xs text-brand-muted mt-2">
-                                    Esse é o quanto você quer receber limpo.
-                                </p>
+                                <p className="text-xs text-brand-muted mt-2">Esse é o quanto você quer receber limpo.</p>
                             </div>
 
                             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-                                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider mb-3 block">
-                                    Maquininha
-                                </label>
+                                <label className="text-xs font-bold text-brand-muted uppercase tracking-wider mb-3 block">Maquininha</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {Object.keys(rates).map(machine => {
                                         const isSelected = selectedMachine === machine;
                                         const brand = MACHINE_COLORS[machine] || { bg: 'bg-gray-500', text: 'text-white', border: 'border-gray-500', dot: 'bg-gray-500' };
-
                                         return (
                                             <button
                                                 key={machine}
                                                 onClick={() => setSelectedMachine(machine)}
                                                 className={`w-full min-h-[44px] px-2 py-1.5 text-[12px] sm:text-[13px] font-bold rounded-xl border-2 transition-all flex items-center justify-center text-center leading-tight relative overflow-hidden
-                                                    ${isSelected 
-                                                        ? `${brand.bg} ${brand.text} ${brand.border} shadow-md scale-[1.02] z-10` 
-                                                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                                                    }`}
+                                                    ${isSelected ? `${brand.bg} ${brand.text} ${brand.border} shadow-md scale-[1.02] z-10` : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
                                             >
-                                                {!isSelected && (
-                                                    <span className={`w-2 h-2 rounded-full absolute left-2.5 ${brand.dot}`}></span>
-                                                )}
+                                                {!isSelected && <span className={`w-2 h-2 rounded-full absolute left-2.5 ${brand.dot}`}></span>}
                                                 {machine}
                                             </button>
                                         );
@@ -341,34 +435,20 @@
 
                             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                                 <div className="flex bg-gray-100 p-1 rounded-xl mb-3">
-                                    <button 
-                                        onClick={() => setFeeMode('absorb')}
-                                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${feeMode === 'absorb' ? 'bg-white text-brand-text shadow-sm' : 'text-gray-500'}`}
-                                    >
-                                        Vou absorver
-                                    </button>
-                                    <button 
-                                        onClick={() => setFeeMode('pass')}
-                                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${feeMode === 'pass' ? 'bg-brand-accent text-white shadow-sm' : 'text-gray-500'}`}
-                                    >
-                                        Vou repassar
-                                    </button>
+                                    <button onClick={() => setFeeMode('absorb')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${feeMode === 'absorb' ? 'bg-white text-brand-text shadow-sm' : 'text-gray-500'}`}>Vou absorver</button>
+                                    <button onClick={() => setFeeMode('pass')} className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${feeMode === 'pass' ? 'bg-brand-accent text-white shadow-sm' : 'text-gray-500'}`}>Vou repassar</button>
                                 </div>
                                 <p className="text-xs text-brand-muted text-center">
-                                    {feeMode === 'pass' 
-                                        ? 'Você cobra a taxa. Cliente paga mais, você recebe o valor cheio.' 
-                                        : 'Você desconta a taxa do seu lucro.'}
+                                    {feeMode === 'pass' ? 'Você cobra a taxa. Cliente paga mais, você recebe o valor cheio.' : 'Você desconta a taxa do seu lucro.'}
                                 </p>
                             </div>
 
-                            <div className="bg-brand-green rounded-2xl p-5 text-white shadow-md">
-                                <h3 className="text-brand-accent text-xs font-bold uppercase tracking-wider mb-2">Modo Educativo</h3>
-                                <p className="text-sm leading-relaxed">
-                                    Se você cobra {formatCurrency(cashPrice)} no Pix e {formatCurrency(cashPrice)} no crédito parcelado em 12x, você recebeu só <strong>{formatCurrency(net12xAbsorbed)}</strong>. Você trabalhou de graça.
+                            {/* MODO EDUCATIVO - TEXTO ALTERADO E CAIXA MENOR */}
+                            <div className="bg-brand-green rounded-2xl p-4 text-white shadow-md">
+                                <h3 className="text-brand-accent text-[11px] font-bold uppercase tracking-wider mb-1.5">Modo Educativo</h3>
+                                <p className="text-[13px] leading-snug text-gray-200">
+                                    O pagamento via Pix não possui taxas, garantindo os {formatCurrency(cashPrice)} integrais. Já no crédito parcelado em até 12x desconta taxas operacionais, resultando em um recebimento líquido de apenas {formatCurrency(net12xAbsorbed)}, o que compromete o lucro da venda.
                                 </p>
-                                <div className="mt-3 pt-3 border-t border-white/20 text-xs text-gray-300">
-                                    Em {selectedMachine}, 12x tem taxa de {tax12x}%. Em {formatCurrency(cashPrice)}, você perde {formatCurrency(loss12xAbsorbed)} se não repassar.
-                                </div>
                             </div>
                         </div>
 
@@ -409,41 +489,51 @@
                                         </div>
                                     </div>
 
-                                    {calculations.parcelas.map(parcela => (
-                                        <div key={parcela.num} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-brand-light flex items-center justify-center text-brand-dark font-bold text-xs">{parcela.num}x</div>
-                                                <div>
-                                                    <p className="font-semibold text-brand-dark">Parcelado</p>
-                                                    <p className="text-xs text-brand-muted">Taxa: {parcela.tax}%</p>
-                                                </div>
+                                    {/* SIMULADOR DE PARCELAS */}
+                                    <div className="p-4 bg-brand-light/30 border-y-2 border-brand-accent/20">
+                                        <p className="font-bold text-brand-dark text-sm mb-3 flex items-center gap-2">
+                                            <svg className="w-4 h-4 text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                            Simulador de Parcelas
+                                        </p>
+                                        
+                                        <div className="grid grid-cols-6 gap-1.5 mb-4">
+                                            {[2,3,4,5,6,7,8,9,10,11,12].map(num => (
+                                                <button
+                                                    key={num}
+                                                    onClick={() => setClientSelectedParcel(num)}
+                                                    className={`h-9 rounded-lg font-bold text-[12px] transition-all flex items-center justify-center ${clientSelectedParcel === num ? 'bg-brand-accent text-white shadow-md scale-105 z-10' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                                                >
+                                                    {num}x
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div className="bg-white rounded-xl p-4 border border-brand-accent shadow-sm flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] text-brand-muted font-bold uppercase mb-1">Cliente paga</p>
+                                                <p className="font-display font-bold text-xl text-brand-dark">
+                                                    {formatCurrency(calculations.parcelas.find(p => p.num === clientSelectedParcel)?.clientPays || 0)}
+                                                </p>
                                             </div>
-                                            <div className="text-right flex flex-col items-end gap-1">
-                                                <div>
-                                                    <p className="text-xs text-brand-muted">Cliente paga</p>
-                                                    <p className="font-display font-bold text-brand-dark">{formatCurrency(parcela.clientPays)}</p>
-                                                </div>
-                                                <div className="bg-brand-light px-2 py-0.5 rounded text-xs text-brand-muted">
-                                                    {parcela.num}x de {formatCurrency(parcela.installmentValue)}
-                                                </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] text-brand-muted font-bold uppercase mb-1">Em</p>
+                                                <p className="font-display font-bold text-lg text-brand-accent">
+                                                    {clientSelectedParcel}x de {formatCurrency(calculations.parcelas.find(p => p.num === clientSelectedParcel)?.installmentValue || 0)}
+                                                </p>
                                             </div>
                                         </div>
-                                    ))}
+                                    </div>
+                                    {/* FIM DO SIMULADOR (LISTA FIXA REMOVIDA) */}
+
                                 </div>
                             </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <button 
-                                    onClick={handleGenerateTable}
-                                    className="w-full bg-brand-dark text-white font-semibold py-4 rounded-xl shadow-sm hover:bg-black transition-colors flex items-center justify-center gap-2 active:scale-95"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"></path></svg>
-                                    Gerar Tabela
+                                <button onClick={handleGenerateTable} className="w-full bg-brand-dark text-white font-semibold py-4 rounded-xl shadow-sm hover:bg-black transition-colors flex items-center justify-center gap-2 active:scale-95">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                    Baixar Tabela
                                 </button>
-                                <button 
-                                    onClick={handleCopyMessage}
-                                    className="w-full bg-brand-accent text-white font-semibold py-4 rounded-xl shadow-sm hover:bg-brand-accentDark transition-colors flex items-center justify-center gap-2 active:scale-95"
-                                >
+                                <button onClick={handleCopyMessage} className="w-full bg-brand-accent text-white font-semibold py-4 rounded-xl shadow-sm hover:bg-brand-accentDark transition-colors flex items-center justify-center gap-2 active:scale-95">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
                                     Copiar Mensagem
                                 </button>
@@ -454,7 +544,6 @@
                     {isEditModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
                             <div className="bg-white w-full md:max-w-2xl rounded-t-3xl md:rounded-3xl p-5 md:p-8 max-h-[90vh] overflow-y-auto animate-slide-up">
-                                
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
                                         <h2 className="text-2xl font-display font-bold text-brand-dark">Editar minhas taxas</h2>
@@ -465,11 +554,7 @@
                                     </button>
                                 </div>
 
-                                {saveError && (
-                                    <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm border border-red-200">
-                                        {saveError}
-                                    </div>
-                                )}
+                                {saveError && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm border border-red-200">{saveError}</div>}
                                 {saveSuccess && (
                                     <div className="bg-green-50 text-green-700 p-3 rounded-lg mb-4 text-sm border border-green-200 flex items-center gap-2">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
@@ -479,51 +564,80 @@
 
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                     {Object.entries(tempRates).map(([key, value]) => {
-                                        let label = "";
-                                        if (key === 'debito') label = "Débito %";
-                                        else if (key === 'credito') label = "Crédito à vista %";
-                                        else label = `${key.replace('p', '')}X %`;
-
+                                        let label = key === 'debito' ? "Débito %" : key === 'credito' ? "Crédito à vista %" : `${key.replace('p', '')}X %`;
                                         return (
                                             <div key={key} className={key === 'debito' || key === 'credito' ? "col-span-1" : ""}>
                                                 <label className="text-xs font-bold text-brand-muted block mb-1">{label}</label>
-                                                <input 
-                                                    type="number" 
-                                                    step="0.01"
-                                                    value={value}
-                                                    onChange={(e) => setTempRates({...tempRates, [key]: parseFloat(e.target.value) || 0})}
-                                                    className="w-full bg-brand-light border border-gray-200 text-brand-dark font-semibold px-3 py-2 rounded-lg focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent transition-all"
-                                                />
+                                                <input type="number" step="0.01" value={value} onChange={(e) => setTempRates({...tempRates, [key]: parseFloat(e.target.value) || 0})} className="w-full bg-brand-light border border-gray-200 text-brand-dark font-semibold px-3 py-2 rounded-lg focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent transition-all" />
                                             </div>
                                         )
                                     })}
                                 </div>
-
                                 <div className="flex gap-3 mt-8">
-                                    <button 
-                                        onClick={() => setIsEditModalOpen(false)}
-                                        className="flex-1 py-3 px-4 border-2 border-gray-200 text-brand-text font-semibold rounded-xl hover:bg-gray-50 transition-colors"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button 
-                                        onClick={handleSaveRates}
-                                        className="flex-1 py-3 px-4 bg-brand-dark text-white font-semibold rounded-xl hover:bg-black transition-colors shadow-lg shadow-brand-dark/20"
-                                    >
-                                        Salvar taxas
+                                    <button onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 px-4 border-2 border-gray-200 text-brand-text font-semibold rounded-xl hover:bg-gray-50 transition-colors">Cancelar</button>
+                                    <button onClick={handleSaveRates} className="flex-1 py-3 px-4 bg-brand-dark text-white font-semibold rounded-xl hover:bg-black transition-colors shadow-lg shadow-brand-dark/20">Salvar taxas</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isClientModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-5 md:p-8 max-h-[90vh] overflow-y-auto animate-slide-up">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 className="text-2xl font-display font-bold text-brand-dark">Meus Clientes</h2>
+                                        <p className="text-sm text-brand-muted mt-1">Gerencie e envie tabelas via WhatsApp</p>
+                                    </div>
+                                    <button onClick={() => setIsClientModalOpen(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
+                                        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                                     </button>
                                 </div>
-                                
-                                <p className="text-center text-xs text-brand-muted mt-4">
-                                    Valores realistas já vêm preenchidos. Edite se sua negociação for diferente.
-                                </p>
+
+                                <form onSubmit={handleAddClient} className="bg-brand-light p-4 rounded-xl mb-6 space-y-3">
+                                    <h3 className="text-xs font-bold text-brand-dark uppercase mb-2">Cadastrar Novo Cliente</h3>
+                                    <div>
+                                        <input type="text" placeholder="Nome do Cliente" required value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} className="w-full bg-white border border-gray-200 text-brand-dark px-3 py-2.5 rounded-lg focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent text-sm" />
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <input type="email" placeholder="E-mail" value={newClient.email} onChange={e => setNewClient({...newClient, email: e.target.value})} className="w-full bg-white border border-gray-200 text-brand-dark px-3 py-2.5 rounded-lg focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent text-sm" />
+                                        <input type="tel" placeholder="Celular / WhatsApp" required value={newClient.phone} onChange={e => setNewClient({...newClient, phone: e.target.value})} className="w-full bg-white border border-gray-200 text-brand-dark px-3 py-2.5 rounded-lg focus:outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent text-sm" />
+                                    </div>
+                                    <button type="submit" className="w-full bg-brand-dark text-white font-semibold py-2.5 rounded-lg hover:bg-black transition-colors text-sm mt-2">Cadastrar Cliente</button>
+                                </form>
+
+                                <div className="space-y-3">
+                                    <h3 className="text-xs font-bold text-brand-muted uppercase">Clientes Cadastrados</h3>
+                                    {clients.length === 0 ? (
+                                        <p className="text-sm text-center text-gray-400 py-4">Nenhum cliente cadastrado ainda.</p>
+                                    ) : (
+                                        clients.map(client => (
+                                            <div key={client.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-gray-100 rounded-xl hover:bg-gray-50 gap-3">
+                                                <div>
+                                                    <p className="font-bold text-brand-dark text-sm">{client.name}</p>
+                                                    <p className="text-xs text-brand-muted">{client.email || 'Sem e-mail'}</p>
+                                                    <p className="text-xs text-brand-muted">{client.phone}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => handleRemoveClient(client.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Excluir">
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                    </button>
+                                                    <button onClick={() => handleSendWhatsApp(client)} className="flex items-center gap-1.5 bg-[#25D366] text-white px-3 py-2 rounded-lg text-xs font-semibold hover:bg-[#1DA851] transition-colors shadow-sm">
+                                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                                        Enviar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {toastMessage && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-toast">
-                            <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold">
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] animate-toast">
+                            <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold whitespace-nowrap">
                                 <svg className="w-5 h-5 text-brand-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
                                 {toastMessage}
                             </div>
