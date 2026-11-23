@@ -64,6 +64,8 @@
             'Stone': { debito: 1.45, credito: 3.10, p2: 4.60, p3: 5.90, p4: 7.20, p5: 8.50, p6: 9.80, p7: 11.10, p8: 12.40, p9: 13.70, p10: 15.00, p11: 16.30, p12: 17.60 },
             'SumUp': { debito: 1.50, credito: 3.10, p2: 4.60, p3: 5.90, p4: 7.20, p5: 8.50, p6: 9.80, p7: 11.10, p8: 12.40, p9: 13.70, p10: 15.00, p11: 16.30, p12: 17.60 },
             'Cielo': { debito: 1.99, credito: 3.19, p2: 4.99, p3: 5.99, p4: 6.99, p5: 7.99, p6: 8.99, p7: 9.99, p8: 10.99, p9: 11.99, p10: 12.99, p11: 14.49, p12: 15.50 },
+            'ModoPag': { debito: 1.59, credito: 3.49, p2: 5.09, p3: 6.09, p4: 7.09, p5: 8.09, p6: 9.09, p7: 10.09, p8: 11.09, p9: 12.09, p10: 13.09, p11: 14.59, p12: 15.99 },
+            'Sicred': { debito: 1.50, credito: 3.50, p2: 5.00, p3: 6.00, p4: 7.00, p5: 8.00, p6: 9.00, p7: 10.00, p8: 11.00, p9: 12.00, p10: 13.00, p11: 14.50, p12: 16.00 },
         };
 
         // Cores oficiais das maquininhas
@@ -76,6 +78,8 @@
             'Stone': { bg: 'bg-[#00A650]', text: 'text-white', border: 'border-[#00A650]', dot: 'bg-[#00A650]' },
             'SumUp': { bg: 'bg-[#0072BC]', text: 'text-white', border: 'border-[#0072BC]', dot: 'bg-[#0072BC]' },
             'Cielo': { bg: 'bg-[#00549F]', text: 'text-white', border: 'border-[#00549F]', dot: 'bg-[#00549F]' },
+            'ModoPag': { bg: 'bg-[#FF7A00]', text: 'text-white', border: 'border-[#FF7A00]', dot: 'bg-[#FF7A00]' },
+            'Sicred': { bg: 'bg-[#008E4F]', text: 'text-white', border: 'border-[#008E4F]', dot: 'bg-[#008E4F]' },
         };
 
         const formatCurrency = (value) => {
@@ -105,7 +109,9 @@
                 try {
                     const saved = localStorage.getItem('@cartao_taxas');
                     if (saved) {
-                        setRates(JSON.parse(saved));
+                        // Mescla as taxas salvas com as novas maquininhas padrão, caso o usuário já tenha um cache antigo
+                        const parsedSaved = JSON.parse(saved);
+                        setRates({ ...DEFAULT_RATES, ...parsedSaved });
                     }
                 } catch (e) {
                     console.log("Ambiente não permite localStorage.");
@@ -311,7 +317,7 @@
                                 <div className="grid grid-cols-2 gap-2">
                                     {Object.keys(rates).map(machine => {
                                         const isSelected = selectedMachine === machine;
-                                        const brand = MACHINE_COLORS[machine];
+                                        const brand = MACHINE_COLORS[machine] || { bg: 'bg-gray-500', text: 'text-white', border: 'border-gray-500', dot: 'bg-gray-500' };
 
                                         return (
                                             <button
@@ -426,7 +432,6 @@
                                 </div>
                             </div>
                             
-                            {/* BOTÕES DE AÇÃO ADICIONADOS COM ONCLICK */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <button 
                                     onClick={handleGenerateTable}
@@ -516,7 +521,6 @@
                         </div>
                     )}
 
-                    {/* TOAST DE NOTIFICAÇÃO DE CÓPIA */}
                     {toastMessage && (
                         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-toast">
                             <div className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 text-sm font-semibold">
